@@ -3,9 +3,8 @@
  <img src=".github/images/teaser.png">
 </p>
 
-**TreeNSearch** is a C++ library for fast computation of neighbor lists in point clouds.
-It implements the method described in our paper *Fast Octree Neighborhood Search for SPH Simulations*.
-However, TreeNSearch can be used for any type of point clouds, not just particle data from fluid simulations.
+**TreeNSearch** is a C++ library for fast computation of neighbor lists in point clouds that implements the method described in our paper *Fast Octree Neighborhood Search for SPH Simulations*.
+TreeNSearch can be used for any type of point clouds, not just particle data from fluid simulations.
 What makes TreeNSearch faster than previous methods is that it employs an adaptive acceleration structure that can utilize the CPU more efficiently.
 TreeNSearch is used in the popular fluid simulation software [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
 
