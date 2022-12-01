@@ -28,8 +28,3 @@ endif()
 # Modules
 add_subdirectory(TreeNSearch)
 add_subdirectory(tests)
-
-install(TARGETS TreeNSearch
-	RUNTIME DESTINATION bin
-	LIBRARY DESTINATION lib
-	ARCHIVE DESTINATION lib)
