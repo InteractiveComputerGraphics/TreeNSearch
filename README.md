@@ -45,7 +45,7 @@ std::vector<std::array<float, 3>> points;
 tns::TreeNSearch nsearch;
 nsearch.set_search_radius(search_radius);
 const int set_0 = nsearch.add_point_set(points[0].data(), points.size());
-nsearch.set_active_search(set_0, set_0);  // points in set_0 searches for neighbors in set_0
+nsearch.set_active_search(set_0, set_0);  // points in set_0 search for neighbors in set_0
 
 // TreeNSearch execution
 nsearch.run();
@@ -136,14 +136,13 @@ If the extent of all the point sets exceeds this limitation, TreeNSearch will te
 For reference, this is enough space to concatenate more than 200 SPH simulations of the Beach Scene with 9M particles as seen in the original [paper](https://animation.rwth-aachen.de/publication/0579/).
 * There is a hard limit on how many neighbors a given point can have due to the internal neighbor list storage data structure.
 The limit is set by default at 2^18 (262,144) neighbors (1MB worth of int32_t).
-While most applications will not experience this limitation
 
 Even though most applications will not suffer from these limitations, we are currently working on handling those extreme cases.
 
 
 ## Notes
 * TreeNSeach is optimized to be run many times as points move very little between runs, which is the typical case for time evolving SPH simulations.
-You might find that TreeNSeach is not the fastest solution for you if your problem doesn't fit to this description.
+You might find that TreeNSeach is not the fastest solution for your application if your problem doesn't fit to this description.
 * TreeNSearch works with type `float` internally, which is faster than `double` for the neighborhood search problem.
 While faster, it has the downside that it will misclassify points as neighbors when they are at approximately search radius distance.
 As consequence, there might be some points found as neighbors by TreeNSearch that would be not classified as neighbor in later processing if carried out in `double` precision.
