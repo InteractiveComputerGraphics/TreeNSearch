@@ -1,0 +1,20 @@
+TreeNSearch TODO
+================
+
+	* Hardcode CompactNSearch for the foam generator
+	* Take it to splishsplash (need to be there by Lukas' submission)
+	* Bugs
+		- Doesnt work for few amount of particles with more than one sets.
+			- Empty point sets?
+			- Broken for few particles with large cells ??
+
+	* GitHub
+		* Optionally specify a different taskflow and libmorton folders
+		* CI and badges
+			
+	* Future work:
+		* Method to free memory without creating a new one.
+		* Particles far away.
+		* callback function to not store neighborlists
+		* Check with the cannon with static particles.
+			Without static sets are we 5% slower? 50% slower? Not slower at all?

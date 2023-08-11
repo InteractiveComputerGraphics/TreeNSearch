@@ -3,8 +3,8 @@
 
 int main()
 {
-	const int n_points = 15000;
-	bool report_when_a_test_fails = false;
+	const int n_points = 1;
+	bool report_when_a_test_fails = true;
 
 	// Tests
 	one_set_fixed_radius(n_points, report_when_a_test_fails);
