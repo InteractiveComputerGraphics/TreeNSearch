@@ -61,25 +61,6 @@ void _compare_tns_with_bruteforce(Points& points, tns::TreeNSearch& nsearch, Bru
 	std::cout << "\tDifferent n_threads scalar... " << (threads_success ? "passed!" : "xxxxxxx FAILED! xxxxxxx") << std::endl;
 	nsearch.set_n_threads(omp_get_max_threads());
 
-	// Cell size
-	bool cell_size_success = true;
-	for (float cell_size = points.search_radius; cell_size < 3.0f * points.search_radius; cell_size += 0.2f * points.search_radius) {
-		nsearch.set_cell_size(cell_size);
-		nsearch.run();
-		cell_size_success = cell_size_success && bruteforce.compare(nsearch, report_when_a_test_fails);
-	}
-	std::cout << "\tDifferent cell_size SIMD... " << (cell_size_success ? "passed!" : "xxxxxxx FAILED! xxxxxxx") << std::endl;
-	nsearch.set_cell_size(1.5f * points.search_radius);
-
-	cell_size_success = true;
-	for (float cell_size = points.search_radius; cell_size < 3.0f * points.search_radius; cell_size += 0.2f * points.search_radius) {
-		nsearch.set_cell_size(cell_size);
-		nsearch.run_scalar();
-		cell_size_success = cell_size_success && bruteforce.compare(nsearch, report_when_a_test_fails);
-	}
-	std::cout << "\tDifferent cell_size scalar... " << (cell_size_success ? "passed!" : "xxxxxxx FAILED! xxxxxxx") << std::endl;
-	nsearch.set_cell_size(1.5f * points.search_radius);
-
 	// Recursion cap
 	bool recursion_cap_success = true;
 	for (int recursion_cap = 100; recursion_cap < 2000; recursion_cap += 100) {

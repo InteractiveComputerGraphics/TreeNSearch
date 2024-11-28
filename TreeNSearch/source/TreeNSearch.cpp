@@ -169,8 +169,13 @@ void tns::TreeNSearch::set_symmetric_search(const bool activate)
 }
 void tns::TreeNSearch::set_cell_size(const float cell_size)
 {
+	if (this->cell_size > 0.0) {
+		std::cout << "tns::TreeNSearch::set_cell_size error: Cell size already set. Create a new TreeNSearch instance if you need a different cell_size." << std::endl;
+		exit(-1);
+	}
 	this->cell_size = cell_size;
 	this->cell_size_inv = 1.0f / cell_size;
+	this->are_cells_valid = false;
 }
 int tns::TreeNSearch::_get_set_pair_id(const int set_i, const int set_j) const
 {
@@ -414,7 +419,25 @@ void tns::TreeNSearch::_update_world_AABB()
 	std::array<float, 3> new_bottom = { MAXf, MAXf, MAXf };
 	std::array<float, 3> new_top = { MINf, MINf, MINf };
 
-	// Find points AABB
+	// Sequentual computation if points are too few
+	if (this->get_total_n_points() < this->number_of_too_few_particles) {
+		for (int set_i = 0; set_i < this->n_sets; set_i++) {
+			const float* points = this->set_points[set_i];
+			const int n_points = this->get_n_points_in_set(set_i);
+
+			for (int point_i = 0; point_i < n_points; point_i++) {
+				new_bottom[0] = std::min(new_bottom[0], points[3 * point_i]);
+				new_bottom[1] = std::min(new_bottom[1], points[3 * point_i + 1]);
+				new_bottom[2] = std::min(new_bottom[2], points[3 * point_i + 2]);
+
+				new_top[0] = std::max(new_top[0], points[3 * point_i]);
+				new_top[1] = std::max(new_top[1], points[3 * point_i + 1]);
+				new_top[2] = std::max(new_top[2], points[3 * point_i + 2]);
+			}
+		}
+	}
+
+	// Parallel version
 	// Note: Paralelized across points and sets
 	for (int set_i = 0; set_i < this->n_sets; set_i++) {
 		const float* points = this->set_points[set_i];
