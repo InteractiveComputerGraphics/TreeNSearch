@@ -382,6 +382,7 @@ namespace tns
 		std::vector<int> set_offsets;  // Assuming all point sets are concatenated, the offset ofa set is the index to the first point
 		std::vector<std::vector<float>> set_points_buffers;  // When declared as double, point data is casted and store as float here
 		std::vector<std::vector<float>> set_radii_buffers;  // When declared as double, point data is casted and store as float here
+		int number_of_too_few_particles = 1000; // Less than this will bypass complex procedures
 
 		// Neighborhood search
 		bool symmetric_search = true;

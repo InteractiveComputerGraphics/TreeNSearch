@@ -31,9 +31,9 @@ void _compare_tns_with_bruteforce(Points& points, tns::TreeNSearch& nsearch, Bru
 	// Comparison
 	bruteforce.run();
 	nsearch.run_scalar();
-	std::cout << "\tNeighborhood search scalar... " << ((bruteforce.compare(nsearch)) ? "passed!" : "xxxxxxx FAILED! xxxxxxx") << std::endl;
+	std::cout << "\tNeighborhood search scalar... " << ((bruteforce.compare(nsearch, report_when_a_test_fails)) ? "passed!" : "xxxxxxx FAILED! xxxxxxx") << std::endl;
 	nsearch.run();
-	std::cout << "\tNeighborhood search SIMD... " << ((bruteforce.compare(nsearch)) ? "passed!" : "xxxxxxx FAILED! xxxxxxx") << std::endl;
+	std::cout << "\tNeighborhood search SIMD... " << ((bruteforce.compare(nsearch, report_when_a_test_fails)) ? "passed!" : "xxxxxxx FAILED! xxxxxxx") << std::endl;
 
 	// Zsort
 	nsearch.prepare_zsort();

@@ -3,7 +3,7 @@
 
 int main()
 {
-	const int n_points = 1;
+	const int n_points = 0;
 	bool report_when_a_test_fails = true;
 
 	// Tests

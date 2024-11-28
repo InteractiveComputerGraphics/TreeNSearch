@@ -129,15 +129,20 @@ void tns::TreeNSearch::set_cell_size(const double cell_size)
 }
 void tns::TreeNSearch::run()
 {
-	// Run in SIMD mode
-	this->_set_up();
-	this->_check();
-	this->_clear_neighborlists();
-	this->_update_world_AABB_simd();
-	this->_points_to_cells_simd();
-	this->_build_octree_and_gather_leaves_simd();
-	this->_solve_leaves(/* use_simd = */ true);
-	this->are_cells_valid = true;
+	if (this->get_total_n_points() < this->number_of_too_few_particles) {
+		this->run_scalar();
+	}
+	else {
+		// Run in SIMD mode
+		this->_set_up();
+		this->_check();
+		this->_clear_neighborlists();
+		this->_update_world_AABB_simd();
+		this->_points_to_cells_simd();
+		this->_build_octree_and_gather_leaves_simd();
+		this->_solve_leaves(/* use_simd = */ true);
+		this->are_cells_valid = true;
+	}
 }
 void tns::TreeNSearch::run_scalar()
 {
@@ -227,6 +232,11 @@ void tns::TreeNSearch::set_all_searches(const bool active)
 }
 tns::NeighborList tns::TreeNSearch::get_neighborlist(const int set_i, const int set_j, const int point_i) const
 {
+	assert(this->does_set_exist(set_i) && "TreeNSearch::get_neighborlist error: Set does not exist.");
+	assert(this->does_set_exist(set_j) && "TreeNSearch::get_neighborlist error: Set does not exist.");
+	assert(this->is_search_active(set_i, set_j) && "TreeNSearch::get_neighborlist error: Set pair not active.");
+	assert(point_i < this->get_n_points_in_set(set_i) && "TreeNSearch::get_neighborlist error: point not in set.");
+	
 	return NeighborList(this->solution_ptr[this->_get_set_pair_id(set_i, set_j)][point_i]);
 }
 const std::vector<int>& tns::TreeNSearch::get_zsort_order(const int set_i) const
@@ -420,25 +430,30 @@ void tns::TreeNSearch::_update_world_AABB()
 			const int begin = thread_id * chunksize;
 			const int end = (thread_id == this->n_threads - 1) ? n_points : (thread_id + 1) * chunksize;
 
-			for (int point_i = begin; point_i < end; point_i++) {
-				thread_bottom[0] = std::min(thread_bottom[0], points[3*point_i]);
-				thread_bottom[1] = std::min(thread_bottom[1], points[3*point_i + 1]);
-				thread_bottom[2] = std::min(thread_bottom[2], points[3*point_i + 2]);
+			// Ignore empty chunks
+			const int thread_n_points = end - begin;
+			if (thread_n_points > 0) {
 
-				thread_top[0] = std::max(thread_top[0], points[3*point_i]);
-				thread_top[1] = std::max(thread_top[1], points[3*point_i + 1]);
-				thread_top[2] = std::max(thread_top[2], points[3*point_i + 2]);
-			}
+				for (int point_i = begin; point_i < end; point_i++) {
+					thread_bottom[0] = std::min(thread_bottom[0], points[3 * point_i]);
+					thread_bottom[1] = std::min(thread_bottom[1], points[3 * point_i + 1]);
+					thread_bottom[2] = std::min(thread_bottom[2], points[3 * point_i + 2]);
 
-			#pragma omp critical
-			{
-				new_bottom[0] = std::min(new_bottom[0], thread_bottom[0]);
-				new_bottom[1] = std::min(new_bottom[1], thread_bottom[1]);
-				new_bottom[2] = std::min(new_bottom[2], thread_bottom[2]);
+					thread_top[0] = std::max(thread_top[0], points[3 * point_i]);
+					thread_top[1] = std::max(thread_top[1], points[3 * point_i + 1]);
+					thread_top[2] = std::max(thread_top[2], points[3 * point_i + 2]);
+				}
 
-				new_top[0] = std::max(new_top[0], thread_top[0]);
-				new_top[1] = std::max(new_top[1], thread_top[1]);
-				new_top[2] = std::max(new_top[2], thread_top[2]);
+				#pragma omp critical
+				{
+					new_bottom[0] = std::min(new_bottom[0], thread_bottom[0]);
+					new_bottom[1] = std::min(new_bottom[1], thread_bottom[1]);
+					new_bottom[2] = std::min(new_bottom[2], thread_bottom[2]);
+
+					new_top[0] = std::max(new_top[0], thread_top[0]);
+					new_top[1] = std::max(new_top[1], thread_top[1]);
+					new_top[2] = std::max(new_top[2], thread_top[2]);
+				}
 			}
 		}
 	}
@@ -522,23 +537,35 @@ void tns::TreeNSearch::_update_world_AABB_simd()
 			const int begin = thread_id * chunksize;
 			const int end = (thread_id == this->n_threads - 1) ? n_points : (thread_id + 1) * chunksize;
 
-			// We compute two points at the same time: [x, y, z, z, y, z, ., .]
-			// Therefore, to not overflow, the remainder is 3
-			for (int point_i = begin; point_i < end - 3; point_i += 2) {
-				const __m256 p = _mm256_loadu_ps(&points[3 * point_i]);
-				b_simd = _mm256_min_ps(b_simd, p);
-				t_simd = _mm256_max_ps(t_simd, p);
+			// Ignore empty chunks
+			const int thread_n_points = end - begin;
+			if (thread_n_points > 0) {
+
+				// We compute two points at the same time: [x, y, z, z, y, z, ., .]
+				// Therefore, to not overflow, the remainder is 3
+				for (int point_i = begin; point_i < end - 3; point_i += 2) {
+					const __m256 p = _mm256_loadu_ps(&points[3 * point_i]);
+					b_simd = _mm256_min_ps(b_simd, p);
+					t_simd = _mm256_max_ps(t_simd, p);
+				}
+
+				for (int point_i = end - 3; point_i < end; point_i++) {
+					const int base = 3 * point_i;
+					const __m256 p = _mm256_setr_ps(points[base + 0], points[base + 1], points[base + 2], 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+					b_simd = _mm256_min_ps(b_simd, p);
+					t_simd = _mm256_max_ps(t_simd, p);
+				}
+
+				thread_domain_simd[thread_id][0] = _mm256_min_ps(thread_domain_simd[thread_id][0], b_simd);
+				thread_domain_simd[thread_id][1] = _mm256_max_ps(thread_domain_simd[thread_id][1], t_simd);
 			}
 
-			for (int point_i = end - 3; point_i < end; point_i++) {
-				const int base = 3 * point_i;
-				const __m256 p = _mm256_setr_ps(points[base + 0], points[base + 1], points[base + 2], 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-				b_simd = _mm256_min_ps(b_simd, p);
-				t_simd = _mm256_max_ps(t_simd, p);
+			// AABB is the first point
+			else {
+				const __m256 p = _mm256_loadu_ps(&points[3 * begin]);
+				thread_domain_simd[thread_id][0] = _mm256_min_ps(thread_domain_simd[thread_id][0], p);
+				thread_domain_simd[thread_id][1] = _mm256_max_ps(thread_domain_simd[thread_id][1], p);
 			}
-
-			thread_domain_simd[thread_id][0] = _mm256_min_ps(thread_domain_simd[thread_id][0], b_simd);
-			thread_domain_simd[thread_id][1] = _mm256_max_ps(thread_domain_simd[thread_id][1], t_simd);
 		}
 	}
 
@@ -636,66 +663,72 @@ void tns::TreeNSearch::_points_to_cells()
 		const int begin_thread_point = chunksize * thread_id;
 		const int end_thread_point = (thread_id == n_threads - 1) ? n_points : chunksize * (thread_id + 1);
 
-		// Find the set of the first point
-		int begin_set = 0;
-		while (this->set_offsets[begin_set + 1] < begin_thread_point) {
-			begin_set++;
-		}
+		// Do not process if there are no points
+		const int thread_n_points = end_thread_point - begin_thread_point;
+		if (thread_n_points > 0) {
 
-		// Find the end set (set of the last point + 1)
-		const int last_point = end_thread_point - 1;
-		int end_set = begin_set;
-		while (this->set_offsets[end_set + 1] < last_point) {
+			// Find the set of the first point
+			int begin_set = 0;
+			while (this->set_offsets[begin_set + 1] < begin_thread_point) {
+				begin_set++;
+			}
+
+			// Find the end set (set of the last point + 1)
+			//const int last_point = end_thread_point - 1;
+			int end_set = begin_set;
+			while (this->set_offsets[end_set + 1] < end_thread_point) {
+				end_set++;
+			}
 			end_set++;
-		}
-		end_set++;
 
-		// For each set
-		for (int set_i = begin_set; set_i < end_set; set_i++) {
+			// For each set
+			for (int set_i = begin_set; set_i < end_set; set_i++) {
 
-			const int set_offset = this->set_offsets[set_i];
-			const int end_set_point = this->set_offsets[set_i + 1];
+				const int set_offset = this->set_offsets[set_i];
+				const int end_set_point = this->set_offsets[set_i + 1];
 
-			const int begin_point = std::max(set_offset, begin_thread_point);
-			const int end_point = std::min(end_set_point, end_thread_point);
+				// Clip the range of the points to process with the set range
+				const int begin_point = std::max(set_offset, begin_thread_point);
+				const int end_point = std::min(end_set_point, end_thread_point);
 
-			const float* points = this->set_points[set_i];
-			
-			// Insert first cell
-			// Note: For every set, we create a new cell to avoid points from different sets sharing the same cell
-			const int point_idx = begin_point - set_offset;
-			const float* p = points + 3 * point_idx;
-			cells.offsets[cell_i] = begin_point;
-			cells.i[cell_i] = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
-			cells.j[cell_i] = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
-			cells.k[cell_i] = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
-			cell_i++;
+				const float* points = this->set_points[set_i];
 
-			// cells computation
-			int point_i = begin_point + 1;
-			for (; point_i < end_point; point_i++) {
-
-				if (cells.capacity <= cell_i) {
-					cells.grow_while_keeping_data(2*cells.capacity);
-				}
-
-				// Load
-				const int point_idx = point_i - set_offset;
+				// Insert first cell
+				// Note: For every set, we create a new cell to avoid points from different sets sharing the same cell
+				const int point_idx = begin_point - set_offset;
 				const float* p = points + 3 * point_idx;
+				cells.offsets[cell_i] = begin_point;
+				cells.i[cell_i] = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
+				cells.j[cell_i] = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
+				cells.k[cell_i] = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
+				cell_i++;
 
-				// Cell coords
-				const uint16_t i = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
-				const uint16_t j = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
-				const uint16_t k = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
+				// cells computation
+				int point_i = begin_point + 1;
+				for (; point_i < end_point; point_i++) {
 
-				// Comparison
-				const bool different = cells.i[cell_i - 1] != i || cells.j[cell_i - 1] != j || cells.k[cell_i - 1] != k;
-				if (different) {
-					cells.offsets[cell_i] = point_i;
-					cells.i[cell_i] = i;
-					cells.j[cell_i] = j;
-					cells.k[cell_i] = k;
-					cell_i++;
+					if (cells.capacity <= cell_i) {
+						cells.grow_while_keeping_data(2 * cells.capacity);
+					}
+
+					// Load
+					const int point_idx = point_i - set_offset;
+					const float* p = points + 3 * point_idx;
+
+					// Cell coords
+					const uint16_t i = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
+					const uint16_t j = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
+					const uint16_t k = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
+
+					// Comparison
+					const bool different = cells.i[cell_i - 1] != i || cells.j[cell_i - 1] != j || cells.k[cell_i - 1] != k;
+					if (different) {
+						cells.offsets[cell_i] = point_i;
+						cells.i[cell_i] = i;
+						cells.j[cell_i] = j;
+						cells.k[cell_i] = k;
+						cell_i++;
+					}
 				}
 			}
 		}
@@ -813,149 +846,155 @@ void tns::TreeNSearch::_points_to_cells_simd()
 		const int begin_thread_point = chunksize * thread_id;
 		const int end_thread_point = (thread_id == n_threads - 1) ? n_points : chunksize * (thread_id + 1);
 
-		// Find the set of the first point
-		int begin_set = 0;
-		while (this->set_offsets[begin_set + 1] < begin_thread_point) {
-			begin_set++;
-		}
+		// Do not process if there are no points
+		const int thread_n_points = end_thread_point - begin_thread_point;
+		if (thread_n_points > 0) {
 
-		// Find the end set (set of the last point + 1)
-		const int last_point = end_thread_point - 1;
-		int end_set = begin_set;
-		while (this->set_offsets[end_set + 1] < last_point) {
-			end_set++;
-		}
-		end_set++;
-
-		// For each set
-		for (int set_i = begin_set; set_i < end_set; set_i++) {
-
-			const int set_offset = this->set_offsets[set_i];
-			const int end_set_point = this->set_offsets[set_i + 1];
-
-			const int begin_point = std::max(set_offset, begin_thread_point);
-			const int end_point = std::min(end_set_point, end_thread_point);
-
-			const float* points = this->set_points[set_i];
-			
-			// Insert first cell
-			// Note: For every set, we create a new cell to avoid points from different sets sharing the same cell
-			const int point_idx = begin_point - set_offset;
-			const float* p = points + 3 * point_idx;
-			cells.offsets[cell_i] = begin_point;
-			cells.i[cell_i] = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
-			cells.j[cell_i] = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
-			cells.k[cell_i] = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
-			cell_i++;
-
-			uint16_t current_i = cells.i[cell_i - 1];
-			uint16_t current_j = cells.j[cell_i - 1];
-			uint16_t current_k = cells.k[cell_i - 1];
-
-			// SIMD preparation
-			const __m256 bx = _mm256_set1_ps(this->domain_float.bottom[0]);
-			const __m256 by = _mm256_set1_ps(this->domain_float.bottom[1]);
-			const __m256 bz = _mm256_set1_ps(this->domain_float.bottom[2]);
-			const __m256 cell_size_inv = _mm256_set1_ps(this->cell_size_inv);
-			const __m128i rotate = _mm_setr_epi8(0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
-
-			// SIMD cells computation
-			int point_i = begin_point + 1;
-			for (; point_i < end_point - 8; point_i += 8) {
-
-				if (cells.capacity - cell_i <= 16) { // 16 so it can write a full 8SIMD line, then 7 remainder and then 1 from a new set
-					cells.grow_while_keeping_data(16 + 2*cells.capacity);
-				}
-
-				// Load
-				const int point_idx = point_i - set_offset;
-				const float* p = points + 3 * point_idx;
-
-				// xyzxyz -> xxyyzz
-				// https://www.intel.com/content/dam/develop/external/us/en/documents/normvec-181650.pdf
-				__m256 m03;
-				__m256 m14;
-				__m256 m25;
-				m03 = _mm256_castps128_ps256(_mm_loadu_ps(p)); // load lower halves
-				m14 = _mm256_castps128_ps256(_mm_loadu_ps(p + 4));
-				m25 = _mm256_castps128_ps256(_mm_loadu_ps(p + 8));
-				m03 = _mm256_insertf128_ps(m03, _mm_loadu_ps(p + 12), 1); // load upper halves
-				m14 = _mm256_insertf128_ps(m14, _mm_loadu_ps(p + 16), 1);
-				m25 = _mm256_insertf128_ps(m25, _mm_loadu_ps(p + 20), 1);
-
-				__m256 xy = _mm256_shuffle_ps(m14, m25, _MM_SHUFFLE(2, 1, 3, 2)); // upper x's and y's 
-				__m256 yz = _mm256_shuffle_ps(m03, m14, _MM_SHUFFLE(1, 0, 2, 1)); // lower y's and z's 
-				__m256 x  = _mm256_shuffle_ps(m03, xy, _MM_SHUFFLE(2, 0, 3, 0));
-				__m256 y  = _mm256_shuffle_ps(yz, xy, _MM_SHUFFLE(3, 1, 2, 0));
-				__m256 z  = _mm256_shuffle_ps(yz, m25, _MM_SHUFFLE(3, 0, 3, 1));
-
-				// point -> cell
-				const __m256i i32 = _mm256_cvttps_epi32(_mm256_mul_ps(_mm256_sub_ps(x, bx), cell_size_inv));
-				const __m256i j32 = _mm256_cvttps_epi32(_mm256_mul_ps(_mm256_sub_ps(y, by), cell_size_inv));
-				const __m256i k32 = _mm256_cvttps_epi32(_mm256_mul_ps(_mm256_sub_ps(z, bz), cell_size_inv));
-
-				// int32 to int16
-				/*
-					There is no instruction to downcast int32 to int16. We need to use _mm256_shuffle_epi8 which can only
-					shuffle bytes locally in 128bit lanes. See https://stackoverflow.com/questions/49721807/what-is-the-inverse-of-mm256-cvtepi16-epi32
-				*/
-				const __m256i i16_two_128 = _mm256_shuffle_epi8(i32, epi32_to_epi16_mask128); // epi16 in each 128bit line
-				const __m256i i16_one_128 = _mm256_permute4x64_epi64(i16_two_128, 0x58);
-				const __m128i i = _mm256_castsi256_si128(i16_one_128);
-
-				const __m256i j16_two_128 = _mm256_shuffle_epi8(j32, epi32_to_epi16_mask128); // epi16 in each 128bit line
-				const __m256i j16_one_128 = _mm256_permute4x64_epi64(j16_two_128, 0x58);
-				const __m128i j = _mm256_castsi256_si128(j16_one_128);
-
-				const __m256i k16_two_128 = _mm256_shuffle_epi8(k32, epi32_to_epi16_mask128); // epi16 in each 128bit line
-				const __m256i k16_one_128 = _mm256_permute4x64_epi64(k16_two_128, 0x58);
-				const __m128i k = _mm256_castsi256_si128(k16_one_128);
-
-				// load comparison -> _mm_setr_epi16(cells.i[cell_i - 1], i[0], i[1], [2], i[3], i[4], i[5], i[6]);
-				const __m128i ic = _mm_insert_epi16(_mm_shuffle_epi8(i, rotate), current_i, 0);
-				const __m128i jc = _mm_insert_epi16(_mm_shuffle_epi8(j, rotate), current_j, 0);
-				const __m128i kc = _mm_insert_epi16(_mm_shuffle_epi8(k, rotate), current_k, 0);
-
-				// compare
-				const __m128i cmp_not = _mm_and_si128(_mm_and_si128(_mm_cmpeq_epi16(i, ic), _mm_cmpeq_epi16(j, jc)), _mm_cmpeq_epi16(k, kc));
-				const __m128i cmp16 = _mm_andnot_si128(cmp_not, _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128()));
-
-				// create shuffle mask id
-				const __m128i cmp8 = _mm_shuffle_epi8(cmp16, epi16_to_epi8_cmp_mask);
-				const int mask_id = _mm_movemask_epi8(cmp8);
-
-				// Make new cells
-				const __m128i shuffle_mask = this->shift_lut_8[mask_id];
-				_mm_storeu_si128((__m128i*)&cells.i[cell_i], _mm_shuffle_epi8(i, shuffle_mask));
-				_mm_storeu_si128((__m128i*)&cells.j[cell_i], _mm_shuffle_epi8(j, shuffle_mask));
-				_mm_storeu_si128((__m128i*)&cells.k[cell_i], _mm_shuffle_epi8(k, shuffle_mask));
-
-				const __m256i offsets = _mm256_add_epi32(this->shift_lut_32[mask_id], _mm256_set1_epi32(point_i));
-				_mm256_storeu_si256((__m256i*)&cells.offsets[cell_i], offsets);
-
-				cell_i += _mm_popcnt_u32(mask_id);
-
-				current_i = cells.i[cell_i - 1];
-				current_j = cells.j[cell_i - 1];
-				current_k = cells.k[cell_i - 1];
+			// Find the set of the first point
+			int begin_set = 0;
+			while (this->set_offsets[begin_set + 1] < begin_thread_point) {
+				begin_set++;
 			}
 
-			// Remainder
-			for (; point_i < end_point; point_i++) {
-				const int point_idx = point_i - set_offset;
+			// Find the end set (set of the last point + 1)
+			//const int last_point = end_thread_point - 1;
+			int end_set = begin_set;
+			while (this->set_offsets[end_set + 1] < end_thread_point) {
+				end_set++;
+			}
+			end_set++;
+
+			// For each set
+			for (int set_i = begin_set; set_i < end_set; set_i++) {
+
+				const int set_offset = this->set_offsets[set_i];
+				const int end_set_point = this->set_offsets[set_i + 1];
+
+				// Clip the range of the points to process with the set range
+				const int begin_point = std::max(set_offset, begin_thread_point);
+				const int end_point = std::min(end_set_point, end_thread_point);
+
+				const float* points = this->set_points[set_i];
+
+				// Insert first cell
+				// Note: For every set, we create a new cell to avoid points from different sets sharing the same cell
+				const int point_idx = begin_point - set_offset;
 				const float* p = points + 3 * point_idx;
+				cells.offsets[cell_i] = begin_point;
+				cells.i[cell_i] = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
+				cells.j[cell_i] = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
+				cells.k[cell_i] = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
+				cell_i++;
 
-				const uint16_t i = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
-				const uint16_t j = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
-				const uint16_t k = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
+				uint16_t current_i = cells.i[cell_i - 1];
+				uint16_t current_j = cells.j[cell_i - 1];
+				uint16_t current_k = cells.k[cell_i - 1];
 
-				const bool cmp = (i == cells.i[cell_i - 1] && j == cells.j[cell_i - 1] && k == cells.k[cell_i - 1]);
-				if (!cmp) {
-					cells.offsets[cell_i] = point_i;
-					cells.i[cell_i] = i;
-					cells.j[cell_i] = j;
-					cells.k[cell_i] = k;
-					cell_i++;
+				// SIMD preparation
+				const __m256 bx = _mm256_set1_ps(this->domain_float.bottom[0]);
+				const __m256 by = _mm256_set1_ps(this->domain_float.bottom[1]);
+				const __m256 bz = _mm256_set1_ps(this->domain_float.bottom[2]);
+				const __m256 cell_size_inv = _mm256_set1_ps(this->cell_size_inv);
+				const __m128i rotate = _mm_setr_epi8(0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
+
+				// SIMD cells computation
+				int point_i = begin_point + 1;
+				for (; point_i < end_point - 8; point_i += 8) {
+
+					if (cells.capacity - cell_i <= 16) { // 16 so it can write a full 8SIMD line, then 7 remainder and then 1 from a new set
+						cells.grow_while_keeping_data(16 + 2 * cells.capacity);
+					}
+
+					// Load
+					const int point_idx = point_i - set_offset;
+					const float* p = points + 3 * point_idx;
+
+					// xyzxyz -> xxyyzz
+					// https://www.intel.com/content/dam/develop/external/us/en/documents/normvec-181650.pdf
+					__m256 m03;
+					__m256 m14;
+					__m256 m25;
+					m03 = _mm256_castps128_ps256(_mm_loadu_ps(p)); // load lower halves
+					m14 = _mm256_castps128_ps256(_mm_loadu_ps(p + 4));
+					m25 = _mm256_castps128_ps256(_mm_loadu_ps(p + 8));
+					m03 = _mm256_insertf128_ps(m03, _mm_loadu_ps(p + 12), 1); // load upper halves
+					m14 = _mm256_insertf128_ps(m14, _mm_loadu_ps(p + 16), 1);
+					m25 = _mm256_insertf128_ps(m25, _mm_loadu_ps(p + 20), 1);
+
+					__m256 xy = _mm256_shuffle_ps(m14, m25, _MM_SHUFFLE(2, 1, 3, 2)); // upper x's and y's 
+					__m256 yz = _mm256_shuffle_ps(m03, m14, _MM_SHUFFLE(1, 0, 2, 1)); // lower y's and z's 
+					__m256 x = _mm256_shuffle_ps(m03, xy, _MM_SHUFFLE(2, 0, 3, 0));
+					__m256 y = _mm256_shuffle_ps(yz, xy, _MM_SHUFFLE(3, 1, 2, 0));
+					__m256 z = _mm256_shuffle_ps(yz, m25, _MM_SHUFFLE(3, 0, 3, 1));
+
+					// point -> cell
+					const __m256i i32 = _mm256_cvttps_epi32(_mm256_mul_ps(_mm256_sub_ps(x, bx), cell_size_inv));
+					const __m256i j32 = _mm256_cvttps_epi32(_mm256_mul_ps(_mm256_sub_ps(y, by), cell_size_inv));
+					const __m256i k32 = _mm256_cvttps_epi32(_mm256_mul_ps(_mm256_sub_ps(z, bz), cell_size_inv));
+
+					// int32 to int16
+					/*
+						There is no instruction to downcast int32 to int16. We need to use _mm256_shuffle_epi8 which can only
+						shuffle bytes locally in 128bit lanes. See https://stackoverflow.com/questions/49721807/what-is-the-inverse-of-mm256-cvtepi16-epi32
+					*/
+					const __m256i i16_two_128 = _mm256_shuffle_epi8(i32, epi32_to_epi16_mask128); // epi16 in each 128bit line
+					const __m256i i16_one_128 = _mm256_permute4x64_epi64(i16_two_128, 0x58);
+					const __m128i i = _mm256_castsi256_si128(i16_one_128);
+
+					const __m256i j16_two_128 = _mm256_shuffle_epi8(j32, epi32_to_epi16_mask128); // epi16 in each 128bit line
+					const __m256i j16_one_128 = _mm256_permute4x64_epi64(j16_two_128, 0x58);
+					const __m128i j = _mm256_castsi256_si128(j16_one_128);
+
+					const __m256i k16_two_128 = _mm256_shuffle_epi8(k32, epi32_to_epi16_mask128); // epi16 in each 128bit line
+					const __m256i k16_one_128 = _mm256_permute4x64_epi64(k16_two_128, 0x58);
+					const __m128i k = _mm256_castsi256_si128(k16_one_128);
+
+					// load comparison -> _mm_setr_epi16(cells.i[cell_i - 1], i[0], i[1], [2], i[3], i[4], i[5], i[6]);
+					const __m128i ic = _mm_insert_epi16(_mm_shuffle_epi8(i, rotate), current_i, 0);
+					const __m128i jc = _mm_insert_epi16(_mm_shuffle_epi8(j, rotate), current_j, 0);
+					const __m128i kc = _mm_insert_epi16(_mm_shuffle_epi8(k, rotate), current_k, 0);
+
+					// compare
+					const __m128i cmp_not = _mm_and_si128(_mm_and_si128(_mm_cmpeq_epi16(i, ic), _mm_cmpeq_epi16(j, jc)), _mm_cmpeq_epi16(k, kc));
+					const __m128i cmp16 = _mm_andnot_si128(cmp_not, _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128()));
+
+					// create shuffle mask id
+					const __m128i cmp8 = _mm_shuffle_epi8(cmp16, epi16_to_epi8_cmp_mask);
+					const int mask_id = _mm_movemask_epi8(cmp8);
+
+					// Make new cells
+					const __m128i shuffle_mask = this->shift_lut_8[mask_id];
+					_mm_storeu_si128((__m128i*) & cells.i[cell_i], _mm_shuffle_epi8(i, shuffle_mask));
+					_mm_storeu_si128((__m128i*) & cells.j[cell_i], _mm_shuffle_epi8(j, shuffle_mask));
+					_mm_storeu_si128((__m128i*) & cells.k[cell_i], _mm_shuffle_epi8(k, shuffle_mask));
+
+					const __m256i offsets = _mm256_add_epi32(this->shift_lut_32[mask_id], _mm256_set1_epi32(point_i));
+					_mm256_storeu_si256((__m256i*) & cells.offsets[cell_i], offsets);
+
+					cell_i += _mm_popcnt_u32(mask_id);
+
+					current_i = cells.i[cell_i - 1];
+					current_j = cells.j[cell_i - 1];
+					current_k = cells.k[cell_i - 1];
+				}
+
+				// Remainder
+				for (; point_i < end_point; point_i++) {
+					const int point_idx = point_i - set_offset;
+					const float* p = points + 3 * point_idx;
+
+					const uint16_t i = (uint16_t)((p[0] - this->domain_float.bottom[0]) * this->cell_size_inv);
+					const uint16_t j = (uint16_t)((p[1] - this->domain_float.bottom[1]) * this->cell_size_inv);
+					const uint16_t k = (uint16_t)((p[2] - this->domain_float.bottom[2]) * this->cell_size_inv);
+
+					const bool cmp = (i == cells.i[cell_i - 1] && j == cells.j[cell_i - 1] && k == cells.k[cell_i - 1]);
+					if (!cmp) {
+						cells.offsets[cell_i] = point_i;
+						cells.i[cell_i] = i;
+						cells.j[cell_i] = j;
+						cells.k[cell_i] = k;
+						cell_i++;
+					}
 				}
 			}
 		}
@@ -1890,6 +1929,9 @@ void tns::TreeNSearch::_prepare_brute_force(OctreeNode& leaf_buffer, const int t
 						const int set_point_i = point_i - set_offset;
 						memcpy(&bruteforce_buffer.points.points[cursor], &set_points[3 * set_point_i], sizeof(float) * 3);
 						bruteforce_buffer.points.indices[cursor] = point_i;
+						//if (cursor == 8) {
+						//	std::cout << "trouble";
+						//}
 						bruteforce_buffer.points.inside_indices[set_i].push_back(cursor);
 						cursor++;
 					}
@@ -2092,6 +2134,16 @@ void tns::TreeNSearch::_brute_force(OctreeNode& leaf_buffer, const int thread_id
 					int* neighborlist_dest = neighborlist.get_cursor_with_space_to_write(n_neighbors + 1);
 					this->solution_ptr[this->_get_set_pair_id(set_i, set_j)][set_idx_i] = neighborlist_dest;
 					memcpy(neighborlist_dest, neighborlist_begin, sizeof(int) * (n_neighbors + 1));
+					
+					//if (set_i == 0 && set_j == 1 && set_idx_i == 7) {
+					//	std::cout << "trouble";
+					//}
+
+					//std::cout << "[("<< set_i << ", " << set_j << "): " << set_idx_i << " ]";
+					//for (int i = 0; i < n_neighbors; i++) {
+					//	std::cout << " " << neighborlist_dest[i + 1];
+					//}
+					//std::cout << std::endl;
 				}
 
 				// Restore the point i coords
@@ -2521,6 +2573,13 @@ void tns::TreeNSearch::prepare_zsort()
 		If the octree exists, we can use merge sort on the cells (instead of on the points)
 		and then find the new point indices concatenating the cell's points in order.
 	*/
+
+	// Minimum number of points for zsort
+	if (this->get_total_n_points() < this->number_of_too_few_particles) {
+		this->are_cells_valid = false; // Ensures we do a global zsort
+	}
+
+	// Set up
 	this->_set_up();
 
 	// Prepare solution z index map
