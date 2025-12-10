@@ -13,19 +13,20 @@ void tests(int n_points, bool crash_at_first_discrepancy)
 
 int main()
 {
-	// Note: Do not run TreeNSearch for 0 particles. 
-	// It will give a warning when run, but it will crash when queried 
-	// (e.g. unexisting particle neighbors or zsort an empty set).
-
-	bool crash_at_first_discrepancy = false;
+	bool crash_at_first_discrepancy = true;
 
 	// Tests
 	tests(/* n_particles = */ 1, crash_at_first_discrepancy);
 	tests(/* n_particles = */ 100, crash_at_first_discrepancy);
 	tests(/* n_particles = */ 10000, crash_at_first_discrepancy);
-
+	
 	// Benchmark
 	const int n_benchmark_points = 9000;
 	benchmark_one_dynamic_set(n_benchmark_points);
-}
 
+	// Heavier stress tests (disabled by default)
+	if (false) {
+		dynamic_emitter_stress_test();
+		combinatorial_stress_test();
+	}
+}

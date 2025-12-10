@@ -18,3 +18,6 @@ void mixed_float_double_point_sets(const int n_points, bool report_when_a_test_f
 void resize_variable_radius(const int n_points, bool report_when_a_test_fails);
 
 void benchmark_one_dynamic_set(const int n_points);
+
+void combinatorial_stress_test();
+void dynamic_emitter_stress_test();
