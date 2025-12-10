@@ -671,22 +671,23 @@ void tns::TreeNSearch::_points_to_cells()
 	*/
 
 	// Compute cells in thread buffers
-	// Note: We distribute the work to the threads from all the point sets simulataneously
+	// Note: We distribute the work to the threads from all the point sets simultaneously
 	this->thread_cells.resize(this->n_threads);
 	#pragma omp parallel num_threads(this->n_threads)
 	{
 		const int thread_id = omp_get_thread_num();
-		CellList& cells = this->thread_cells[thread_id];
-		cells.init_with_at_least_size(std::max(10000, (int)(0.1*this->get_total_n_points())));
-		int cell_i = 0;
 
 		const int n_points = this->get_total_n_points();
 		const int chunksize = n_points / n_threads;
 		const int begin_thread_point = chunksize * thread_id;
 		const int end_thread_point = (thread_id == n_threads - 1) ? n_points : chunksize * (thread_id + 1);
+		const int thread_n_points = end_thread_point - begin_thread_point;
+
+		CellList& cells = this->thread_cells[thread_id];
+		cells.init_with_at_least_size(std::max(10000, (int)(0.1*this->get_total_n_points())));
+		int cell_i = 0;
 
 		// Do not process if there are no points
-		const int thread_n_points = end_thread_point - begin_thread_point;
 		if (thread_n_points > 0) {
 
 			// Find the set of the first point
@@ -715,8 +716,12 @@ void tns::TreeNSearch::_points_to_cells()
 				if (begin_point >= end_point) { continue; }
 
 				const float* points = this->set_points[set_i]; 
-
+				
 				// Insert first cell
+				if (cell_i >= cells.capacity) {
+					cells.grow_while_keeping_data(std::max(cell_i + 1, 2 * cells.capacity));
+				}
+
 				// Note: For every set, we create a new cell to avoid points from different sets sharing the same cell
 				const int point_idx = begin_point - set_offset;
 				const float* p = points + 3 * point_idx;
@@ -730,8 +735,8 @@ void tns::TreeNSearch::_points_to_cells()
 				int point_i = begin_point + 1;
 				for (; point_i < end_point; point_i++) {
 
-					if (cells.capacity <= cell_i) {
-						cells.grow_while_keeping_data(2 * cells.capacity);
+					if (cell_i >= cells.capacity) {
+						cells.grow_while_keeping_data(std::max(cell_i + 1, 2 * cells.capacity));
 					}
 
 					// Load
@@ -849,28 +854,29 @@ void tns::TreeNSearch::_points_to_cells_simd()
 {
 	/*
 		In this SIMD implementation of _points_to_cells() eight points are processed at the
-		same time. The eight ijk cell coordiantes are computed and points have different
+		same time. The eight ijk cell coordinates are computed and points have different
 		cell indices are identified. Then, SIMD permutations are used to append the cell
 		boundaries to the global array without using branches.
 	*/
 
 	// Compute cells in thread buffers
-	// Note: We distribute the work to the threads from all the point sets simulataneously
+	// Note: We distribute the work to the threads from all the point sets simultaneously
 	this->thread_cells.resize(this->n_threads);
 	#pragma omp parallel num_threads(this->n_threads)
 	{
 		const int thread_id = omp_get_thread_num();
-		CellList& cells = this->thread_cells[thread_id];
-		cells.init_with_at_least_size(std::max(10000, (int)(0.1*this->get_total_n_points())));
-		int cell_i = 0;
 
 		const int n_points = this->get_total_n_points();
 		const int chunksize = n_points / n_threads;
 		const int begin_thread_point = chunksize * thread_id;
 		const int end_thread_point = (thread_id == n_threads - 1) ? n_points : chunksize * (thread_id + 1);
+		const int thread_n_points = end_thread_point - begin_thread_point;
+
+		CellList& cells = this->thread_cells[thread_id];
+		cells.init_with_at_least_size(std::max(10000, (int)(0.1*this->get_total_n_points())));
+		int cell_i = 0;
 
 		// Do not process if there are no points
-		const int thread_n_points = end_thread_point - begin_thread_point;
 		if (thread_n_points > 0) {
 
 			// Find the set of the first point
@@ -899,8 +905,12 @@ void tns::TreeNSearch::_points_to_cells_simd()
 				if (begin_point >= end_point) { continue; }
 
 				const float* points = this->set_points[set_i];
-
+				
 				// Insert first cell
+				if (cell_i >= cells.capacity) {
+					cells.grow_while_keeping_data(std::max(cell_i + 1, 2 * cells.capacity));
+				}
+
 				// Note: For every set, we create a new cell to avoid points from different sets sharing the same cell
 				const int point_idx = begin_point - set_offset;
 				const float* p = points + 3 * point_idx;
@@ -925,8 +935,8 @@ void tns::TreeNSearch::_points_to_cells_simd()
 				int point_i = begin_point + 1;
 				for (; point_i < end_point - 8; point_i += 8) {
 
-					if (cells.capacity - cell_i <= 16) { // 16 so it can write a full 8SIMD line, then 7 remainder and then 1 from a new set
-						cells.grow_while_keeping_data(16 + 2 * cells.capacity);
+					if (cell_i + 8 > cells.capacity) {
+						cells.grow_while_keeping_data(std::max(cell_i + 8, 2 * cells.capacity));
 					}
 
 					// Load
@@ -1013,6 +1023,10 @@ void tns::TreeNSearch::_points_to_cells_simd()
 
 					const bool cmp = (i == cells.i[cell_i - 1] && j == cells.j[cell_i - 1] && k == cells.k[cell_i - 1]);
 					if (!cmp) {
+						if (cell_i >= cells.capacity) {
+							cells.grow_while_keeping_data(std::max(cell_i + 1, 2 * cells.capacity));
+						}
+
 						cells.offsets[cell_i] = point_i;
 						cells.i[cell_i] = i;
 						cells.j[cell_i] = j;
@@ -1396,12 +1410,6 @@ void tns::TreeNSearch::_run_octree_node(RecursiveOctreeNode& node_buffer, const 
 
 		// Variable of fixed search radius
 		if (!this->is_global_search_radius_set) {
-			// if (this->symmetric_search) {
-			// 	for (int child_i = 0; child_i < 8; child_i++) {
-			// 		node_buffer.children[child_i]->buffer.max_search_radius = this->max_search_radius;
-			// 	}
-			// }
-			// else {
 				for (int child_i = 0; child_i < 8; child_i++) {
 					auto& child_cell_indices = node_buffer.children[child_i]->buffer.cell_indices;
 					const int n_cells = child_cell_indices.size();
@@ -1411,7 +1419,6 @@ void tns::TreeNSearch::_run_octree_node(RecursiveOctreeNode& node_buffer, const 
 						max_radius = std::max(max_radius, this->cells.radii[c]);
 					}
 					node_buffer.children[child_i]->buffer.max_search_radius = max_radius;
-				// }
 			}
 		}
 		else {
@@ -1787,12 +1794,6 @@ void tns::TreeNSearch::_run_octree_node_simd(RecursiveOctreeNode& node_buffer, c
 
 		// Variable of fixed search radius
 		if (!this->is_global_search_radius_set) {
-			// if (this->symmetric_search) {
-			// 	for (int child_i = 0; child_i < 8; child_i++) {
-			// 		node_buffer.children[child_i]->buffer.max_search_radius = this->max_search_radius;
-			// 	}
-			// }
-			// else {
 				for (int child_i = 0; child_i < 8; child_i++) {
 					auto& child_cell_indices = node_buffer.children[child_i]->buffer.cell_indices;
 					const int n_cells = child_cell_indices.size();
@@ -1802,7 +1803,6 @@ void tns::TreeNSearch::_run_octree_node_simd(RecursiveOctreeNode& node_buffer, c
 						max_radius = std::max(max_radius, this->cells.radii[c]);
 					}
 					node_buffer.children[child_i]->buffer.max_search_radius = max_radius;
-				// }
 			}
 		}
 		else {
