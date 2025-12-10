@@ -37,7 +37,7 @@ Follow these steps to integrate the TreeNSearch library into another CMake proje
 ### Simple full example
 Simplest example for TreeNSearch: one point set, all the points have the same search radius.
 ```c++
-// Data types. (Unintiallized for illustration purposes)
+// Data types. (Uninitialized for illustration purposes)
 float search_radius;
 std::vector<std::array<float, 3>> points;
 
@@ -78,7 +78,7 @@ In the above example, points in `set_1` do not search for neighbors in `set_1`.
 ### Variable search radii
 To work with variable per-point search radius, we can simply include a pointer search radii array in the point set declaration:
 ```c++
-// Data types. (Unintiallized for illustration purposes)
+// Data types. (Uninitialized for illustration purposes)
 float search_radius;
 std::vector<std::array<float, 3>> points;
 std::vector<float> radii;
@@ -98,7 +98,7 @@ An explicit sort is often done every few time steps.
 TreeNSearch can take advantage of its internal data structure to provide a very fast approximate sort.
 You can sort any data as follows:
 ```c++
-// Data types. (Unintiallized for illustration purposes)
+// Data types. (Uninitialized for illustration purposes)
 std::vector<std::array<float, 3>> points;
 std::vector<double> density;
 std::vector<uint32_t> indices;

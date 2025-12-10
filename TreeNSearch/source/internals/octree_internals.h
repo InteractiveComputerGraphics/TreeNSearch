@@ -167,7 +167,7 @@ namespace tns
 		class RecursiveBuffer
 		{
 		public:
-			// Fiedls
+			// Fields
 			NODE_BUFFER buffer;
 			RecursiveBuffer* parent = nullptr;
 			std::array<RecursiveBuffer*, N> children;

@@ -42,7 +42,7 @@ namespace tns
 		/**
 		 * @brief Adds a collection of points to search and/or to be found in **fixed radius** neighborhood search mode.
 		 * 
-		 * @warning It is not possible to mix fixed radius with variable radius search radius. If one point set has varaible search radius, all of them must be declared as variable.
+		 * @warning It is not possible to mix fixed radius with variable radius search radius. If one point set has variable search radius, all of them must be declared as variable.
 		 * 
 		 * @param points_begin Pointer to the points coordinates. Coordinates must be contiguous in memory and in `xyzxyzxyz` layout.
 		 * @param n_points Number of points in the set.
@@ -54,8 +54,8 @@ namespace tns
 		/**
 		 * @brief Adds a collection of points to search and/or to be found in **fixed radius** neighborhood search mode.
 		 *
-		 * @warning TreeNSearch works with type float internally. Declaring point sets as type double will incurr into data copying at the beginning of the neighborhood search process.
-		 * @warning It is not possible to mix fixed radius with variable radius search radius. If one point set has varaible search radius, all of them must be declared as variable.
+		 * @warning TreeNSearch works with type float internally. Declaring point sets as type double will incur into data copying at the beginning of the neighborhood search process.
+		 * @warning It is not possible to mix fixed radius with variable radius search radius. If one point set has variable search radius, all of them must be declared as variable.
 		 *
 		 * @param points_begin Pointer to the points coordinates. Coordinates must be contiguous in memory and in `xyzxyzxyz` layout.
 		 * @param n_points Number of points in the set.
@@ -116,7 +116,7 @@ namespace tns
 		/**
 		 * @brief Adds a collection of points to search and/or to be found in **variable radius** neighborhood search mode.
 		 * 
-		 * @warning TreeNSearch works with type float internally. Declaring point sets as type double will incurr into data copying at the beginning of the neighborhood search process.
+		 * @warning TreeNSearch works with type float internally. Declaring point sets as type double will incur into data copying at the beginning of the neighborhood search process.
 		 * @warning It is not possible to mix fixed radius sets with variable search radius sets. If one point set has variable search radius, all of them must be declared as variable.
 		 * 
 		 * @param points_begin Pointer to the points coordinates. Coordinates must be contiguous in memory and in `xyzxyzxyz` layout.
