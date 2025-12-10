@@ -6,7 +6,7 @@
 **TreeNSearch** is a C++ library for fast computation of neighbor lists in point clouds that implements the method described in our paper *Fast Octree Neighborhood Search for SPH Simulations*.
 TreeNSearch can be used for any type of point clouds, not just particle data from fluid simulations.
 What makes TreeNSearch faster than previous methods is that it employs an adaptive acceleration structure that can utilize the CPU more efficiently.
-TreeNSearch is used in the popular fluid simulation software [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
+Demonstrations using TreeNSearch are computed with the popular fluid simulation software [SPlisHSPlasH](https://github.com/InteractiveComputerGraphics/SPlisHSPlasH).
 
 All the internal stages of TreeNSearch are available in two versions, one using scalar instructions and another using AVX2 SIMD instructions.
 Both implementations are 100% interchangeable.
@@ -58,7 +58,7 @@ for (int loc_j = 0; loc_j < neighborlist.size(); loc_j++) {
 }
 ```
 To execute the neighborhood search again after points have moved, simply use `nsearch.run()` again and the next traversals will be updated.
-If the number of points or the pointer to the point coordinate changes, use `nsearch.resize_point_set(set_id, points_ptr, n_points)`.
+If the number of points or the pointer to the point coordinate change, use `nsearch.resize_point_set(set_id, points_ptr, n_points)`.
 
 **Important:** Points are not included in their own neighbor list.
 
@@ -95,8 +95,8 @@ If a single point set has variable search radii, all sets must be declared as su
 ### Sorting to a space filling Z curve
 In SPH simulations typically point data is kept approximately sorted to improve performance due to better cache utilization.
 An explicit sort is often done every few time steps.
-TreeNSearch can take advantage of its internal data structure to provide a very fast approximate sort.
-You can sort any data as follows:
+TreeNSearch can take advantage of its internal data structure to provide a very fast approximated sort.
+You can sort data as follows:
 ```c++
 // Data types. (Uninitialized for illustration purposes)
 std::vector<std::array<float, 3>> points;
@@ -137,13 +137,10 @@ For reference, this is enough space to concatenate more than 200 SPH simulations
 * There is a hard limit on how many neighbors a given point can have due to the internal neighbor list storage data structure.
 The limit is set by default at 2^18 (262,144) neighbors (1MB worth of int32_t).
 
-Even though most applications will not suffer from these limitations, we are currently working on handling those extreme cases.
-
 
 ## Notes
 * TreeNSeach is optimized to be run many times as points move very little between runs, which is the typical case for time evolving SPH simulations.
 You might find that TreeNSeach is not the fastest solution for your application if your problem doesn't fit to this description.
 * TreeNSearch works with type `float` internally, which is faster than `double` for the neighborhood search problem.
-While faster, it has the downside that it will misclassify points as neighbors when they are at approximately search radius distance.
 As consequence, there might be some points found as neighbors by TreeNSearch that would be not classified as neighbor in later processing if carried out in `double` precision.
-The misclasification tolerance is the machine precision value of `float`, ~5.96e-08.
+The misclassification tolerance is the machine precision value of `float`, ~5.96e-08.
