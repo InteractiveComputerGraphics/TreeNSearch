@@ -301,7 +301,12 @@ void tns::TreeNSearch::_set_up()
 		else {
 			float min_radius = std::numeric_limits<float>::max();
 			for (int set_i = 0; set_i < this->n_sets; set_i++) {
-				min_radius = std::min(min_radius, *std::min_element(this->set_radii[set_i], this->set_radii[set_i] + this->get_n_points_in_set(set_i)));
+				if (this->get_n_points_in_set(set_i) > 0) {
+					min_radius = std::min(min_radius, *std::min_element(this->set_radii[set_i], this->set_radii[set_i] + this->get_n_points_in_set(set_i)));
+				}
+			}
+			if (min_radius == std::numeric_limits<float>::max()) {
+				min_radius = 1.0f;
 			}
 			this->set_cell_size(1.5f*min_radius);
 		}
@@ -764,8 +769,8 @@ void tns::TreeNSearch::_points_to_cells()
 	const int n_cells = thread_cells_offsets.back();
 
 	//// Parallel write
-	if (this->cells.capacity < n_cells) {
-		this->cells.init_with_at_least_size((int)(1.1*n_cells));
+	if (this->cells.capacity < n_cells || this->cells.offsets == nullptr) {
+		this->cells.init_with_at_least_size(std::max(1, (int)(1.1*n_cells)));
 	}
 	#pragma omp parallel num_threads(this->n_threads)
 	{
@@ -1033,8 +1038,8 @@ void tns::TreeNSearch::_points_to_cells_simd()
 	const int n_cells = thread_cells_offsets.back();
 
 	//// Parallel write
-	if (this->cells.capacity < n_cells) {
-		this->cells.init_with_at_least_size((int)(1.1*n_cells));
+	if (this->cells.capacity < n_cells || this->cells.offsets == nullptr) {
+		this->cells.init_with_at_least_size(std::max(1, (int)(1.1*n_cells)));
 	}
 	#pragma omp parallel num_threads(this->n_threads)
 	{
@@ -1203,8 +1208,7 @@ void tns::TreeNSearch::_run_octree_node(RecursiveOctreeNode& node_buffer, const 
 
 	// Early exit: Impossible to find neighbors
 	if (n_cells == 0) {
-		std::cout << "compare TreeNSearch: node with zero cells." << std::endl;
-		exit(-1);
+		return;
 	}
 
 	// Ghost cells
@@ -1392,15 +1396,22 @@ void tns::TreeNSearch::_run_octree_node(RecursiveOctreeNode& node_buffer, const 
 
 		// Variable of fixed search radius
 		if (!this->is_global_search_radius_set) {
-			for (int child_i = 0; child_i < 8; child_i++) {
-				auto& child_cell_indices = node_buffer.children[child_i]->buffer.cell_indices;
-				const int n_cells = child_cell_indices.size();
-				float max_radius = 0.0f;
-				for (int cell_i = 0; cell_i < n_cells; cell_i++) {
-					const int c = child_cell_indices[cell_i];
-					max_radius = std::max(max_radius, this->cells.radii[c]);
-				}
-				node_buffer.children[child_i]->buffer.max_search_radius = max_radius;
+			// if (this->symmetric_search) {
+			// 	for (int child_i = 0; child_i < 8; child_i++) {
+			// 		node_buffer.children[child_i]->buffer.max_search_radius = this->max_search_radius;
+			// 	}
+			// }
+			// else {
+				for (int child_i = 0; child_i < 8; child_i++) {
+					auto& child_cell_indices = node_buffer.children[child_i]->buffer.cell_indices;
+					const int n_cells = child_cell_indices.size();
+					float max_radius = 0.0f;
+					for (int cell_i = 0; cell_i < n_cells; cell_i++) {
+						const int c = child_cell_indices[cell_i];
+						max_radius = std::max(max_radius, this->cells.radii[c]);
+					}
+					node_buffer.children[child_i]->buffer.max_search_radius = max_radius;
+				// }
 			}
 		}
 		else {
@@ -1450,8 +1461,7 @@ void tns::TreeNSearch::_run_octree_node_simd(RecursiveOctreeNode& node_buffer, c
 
 	// Early exit: Impossible to find neighbors
 	if (n_cells == 0) {
-		std::cout << "compare TreeNSearch: node with zero cells." << std::endl;
-		exit(-1);
+		return;
 	}
 
 	// Ghost cells
@@ -1777,15 +1787,22 @@ void tns::TreeNSearch::_run_octree_node_simd(RecursiveOctreeNode& node_buffer, c
 
 		// Variable of fixed search radius
 		if (!this->is_global_search_radius_set) {
-			for (int child_i = 0; child_i < 8; child_i++) {
-				auto& child_cell_indices = node_buffer.children[child_i]->buffer.cell_indices;
-				const int n_cells = child_cell_indices.size();
-				float max_radius = 0.0f;
-				for (int cell_i = 0; cell_i < n_cells; cell_i++) {
-					const int c = child_cell_indices[cell_i];
-					max_radius = std::max(max_radius, this->cells.radii[c]);
-				}
-				node_buffer.children[child_i]->buffer.max_search_radius = max_radius;
+			// if (this->symmetric_search) {
+			// 	for (int child_i = 0; child_i < 8; child_i++) {
+			// 		node_buffer.children[child_i]->buffer.max_search_radius = this->max_search_radius;
+			// 	}
+			// }
+			// else {
+				for (int child_i = 0; child_i < 8; child_i++) {
+					auto& child_cell_indices = node_buffer.children[child_i]->buffer.cell_indices;
+					const int n_cells = child_cell_indices.size();
+					float max_radius = 0.0f;
+					for (int cell_i = 0; cell_i < n_cells; cell_i++) {
+						const int c = child_cell_indices[cell_i];
+						max_radius = std::max(max_radius, this->cells.radii[c]);
+					}
+					node_buffer.children[child_i]->buffer.max_search_radius = max_radius;
+				// }
 			}
 		}
 		else {
@@ -2690,6 +2707,7 @@ void tns::TreeNSearch::_compute_zsort_order_notree()
 	for (int set_i = 0; set_i < this->n_sets; set_i++) {
 		const float* points = this->set_points[set_i];
 		const int n_points = this->get_n_points_in_set(set_i);
+		if (n_points == 0) { continue; }
 		point_idx_cell_zidx_pairs.resize(n_points);
 
 		// Cell size
