@@ -564,15 +564,16 @@ void tns::TreeNSearch::_update_world_AABB_simd()
 			const int thread_n_points = end - begin;
 			if (thread_n_points > 0) {
 
-				// We compute two points at the same time: [x, y, z, z, y, z, ., .]
+				// We compute two points at the same time: [x, y, z, x, y, z, ., .]
 				// Therefore, to not overflow, the remainder is 3
-				for (int point_i = begin; point_i < end - 3; point_i += 2) {
+				int point_i = begin;
+				for (; point_i < end - 3; point_i += 2) {
 					const __m256 p = _mm256_loadu_ps(&points[3 * point_i]);
 					b_simd = _mm256_min_ps(b_simd, p);
 					t_simd = _mm256_max_ps(t_simd, p);
 				}
 
-				for (int point_i = end - 3; point_i < end; point_i++) {
+				for (; point_i < end; point_i++) {
 					const int base = 3 * point_i;
 					const __m256 p = _mm256_setr_ps(points[base + 0], points[base + 1], points[base + 2], 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 					b_simd = _mm256_min_ps(b_simd, p);
@@ -581,13 +582,6 @@ void tns::TreeNSearch::_update_world_AABB_simd()
 
 				thread_domain_simd[thread_id][0] = _mm256_min_ps(thread_domain_simd[thread_id][0], b_simd);
 				thread_domain_simd[thread_id][1] = _mm256_max_ps(thread_domain_simd[thread_id][1], t_simd);
-			}
-
-			// AABB is the first point
-			else {
-				const __m256 p = _mm256_loadu_ps(&points[3 * begin]);
-				thread_domain_simd[thread_id][0] = _mm256_min_ps(thread_domain_simd[thread_id][0], p);
-				thread_domain_simd[thread_id][1] = _mm256_max_ps(thread_domain_simd[thread_id][1], p);
 			}
 		}
 	}
@@ -692,7 +686,7 @@ void tns::TreeNSearch::_points_to_cells()
 
 			// Find the set of the first point
 			int begin_set = 0;
-			while (this->set_offsets[begin_set + 1] < begin_thread_point) {
+			while (this->set_offsets[begin_set + 1] <= begin_thread_point) {
 				begin_set++;
 			}
 
@@ -786,7 +780,7 @@ void tns::TreeNSearch::_points_to_cells()
 	}
 	this->cells.n_cells = n_cells;
 	this->cells.offsets[n_cells] = this->get_total_n_points();
-	this->avg_points_per_cell = this->get_total_n_points() / n_cells;
+	this->avg_points_per_cell = (n_cells > 0) ? this->get_total_n_points() / n_cells : 0;
 
 
 	// Variable radius
@@ -875,7 +869,7 @@ void tns::TreeNSearch::_points_to_cells_simd()
 
 			// Find the set of the first point
 			int begin_set = 0;
-			while (this->set_offsets[begin_set + 1] < begin_thread_point) {
+			while (this->set_offsets[begin_set + 1] <= begin_thread_point) {
 				begin_set++;
 			}
 
@@ -1054,7 +1048,7 @@ void tns::TreeNSearch::_points_to_cells_simd()
 	}
 	this->cells.n_cells = n_cells;
 	this->cells.offsets[n_cells] = this->get_total_n_points();
-	this->avg_points_per_cell = this->get_total_n_points() / n_cells;
+	this->avg_points_per_cell = (n_cells > 0) ? this->get_total_n_points() / n_cells : 0;
 
 
 	// Variable radius

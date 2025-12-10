@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.28)
 project(TreeNSearch)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -14,7 +14,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options("-Wno-ignored-attributes")  # AVX warnings
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	add_compile_options("/arch:AVX")
-	add_compile_options("/wd4996 ")  # supress fopen warning
 endif()
 
 ## OpenMP
