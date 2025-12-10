@@ -707,8 +707,9 @@ void tns::TreeNSearch::_points_to_cells()
 				// Clip the range of the points to process with the set range
 				const int begin_point = std::max(set_offset, begin_thread_point);
 				const int end_point = std::min(end_set_point, end_thread_point);
+				if (begin_point >= end_point) { continue; }
 
-				const float* points = this->set_points[set_i];
+				const float* points = this->set_points[set_i]; 
 
 				// Insert first cell
 				// Note: For every set, we create a new cell to avoid points from different sets sharing the same cell
@@ -890,6 +891,7 @@ void tns::TreeNSearch::_points_to_cells_simd()
 				// Clip the range of the points to process with the set range
 				const int begin_point = std::max(set_offset, begin_thread_point);
 				const int end_point = std::min(end_set_point, end_thread_point);
+				if (begin_point >= end_point) { continue; }
 
 				const float* points = this->set_points[set_i];
 
