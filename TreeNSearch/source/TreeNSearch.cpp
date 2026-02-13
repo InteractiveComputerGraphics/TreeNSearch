@@ -1,5 +1,13 @@
 #include "TreeNSearch.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <limits>
+#include <numeric>
+
 #include <libmorton/morton.h>
 #include <taskflow/taskflow.hpp>
 #include <taskflow/algorithm/sort.hpp>
@@ -697,7 +705,6 @@ void tns::TreeNSearch::_points_to_cells()
 			}
 
 			// Find the end set (set of the last point + 1)
-			//const int last_point = end_thread_point - 1;
 			int end_set = begin_set;
 			while (this->set_offsets[end_set + 1] < end_thread_point) {
 				end_set++;
@@ -886,7 +893,6 @@ void tns::TreeNSearch::_points_to_cells_simd()
 			}
 
 			// Find the end set (set of the last point + 1)
-			//const int last_point = end_thread_point - 1;
 			int end_set = begin_set;
 			while (this->set_offsets[end_set + 1] < end_thread_point) {
 				end_set++;
@@ -1965,9 +1971,6 @@ void tns::TreeNSearch::_prepare_brute_force(OctreeNode& leaf_buffer, const int t
 						const int set_point_i = point_i - set_offset;
 						memcpy(&bruteforce_buffer.points.points[cursor], &set_points[3 * set_point_i], sizeof(float) * 3);
 						bruteforce_buffer.points.indices[cursor] = point_i;
-						//if (cursor == 8) {
-						//	std::cout << "trouble";
-						//}
 						bruteforce_buffer.points.inside_indices[set_i].push_back(cursor);
 						cursor++;
 					}
@@ -2170,16 +2173,6 @@ void tns::TreeNSearch::_brute_force(OctreeNode& leaf_buffer, const int thread_id
 					int* neighborlist_dest = neighborlist.get_cursor_with_space_to_write(n_neighbors + 1);
 					this->solution_ptr[this->_get_set_pair_id(set_i, set_j)][set_idx_i] = neighborlist_dest;
 					memcpy(neighborlist_dest, neighborlist_begin, sizeof(int) * (n_neighbors + 1));
-					
-					//if (set_i == 0 && set_j == 1 && set_idx_i == 7) {
-					//	std::cout << "trouble";
-					//}
-
-					//std::cout << "[("<< set_i << ", " << set_j << "): " << set_idx_i << " ]";
-					//for (int i = 0; i < n_neighbors; i++) {
-					//	std::cout << " " << neighborlist_dest[i + 1];
-					//}
-					//std::cout << std::endl;
 				}
 
 				// Restore the point i coords
@@ -2390,7 +2383,7 @@ bool tns::TreeNSearch::_prepare_brute_force_simd(OctreeNode& leaf_buffer, const 
 			for (int i = 0; i < padding; i++) {
 				xs[cursor] = std::numeric_limits<float>::max();
 				ys[cursor] = std::numeric_limits<float>::max();
-				ys[cursor] = std::numeric_limits<float>::max();
+				zs[cursor] = std::numeric_limits<float>::max();
 				indices_s[cursor] = -1;
 
 				if (!this->is_global_search_radius_set) {
@@ -2701,7 +2694,6 @@ void tns::TreeNSearch::_compute_zsort_order_notree()
 	this->_update_world_AABB_simd();
 	const std::array<float, 3>& bottom = this->domain_float.bottom;
 	const std::array<float, 3>& top = this->domain_float.top;
-	const float world_size = top[0] - bottom[0];
 
 	std::vector<std::pair<int, uint_fast64_t>> point_idx_cell_zidx_pairs;
 	for (int set_i = 0; set_i < this->n_sets; set_i++) {
@@ -2755,7 +2747,6 @@ void tns::TreeNSearch::print_state() const
 {
 	auto print3f = [](const float* p) {std::cout << "[" << p[0] << ", " << p[1] << ", " << p[2] << "]" << std::endl; };
 	auto print3u16 = [](const uint16_t* p) {std::cout << "[" << p[0] << ", " << p[1] << ", " << p[2] << "]" << std::endl; };
-	auto print3int = [](const int* p) {std::cout << "[" << p[0] << ", " << p[1] << ", " << p[2] << "]" << std::endl; };
 	auto print_bool = [](const bool b) { std::cout << ((b) ? "true" : "false") << std::endl; };
 	auto min_max_sum_init = []() { return std::array<int, 3>({ std::numeric_limits<int>::max(), std::numeric_limits<int>::lowest(), 0 }); };
 	auto min_max_sum = [](std::array<int, 3>& arr, const int n) {arr[0] = std::min(arr[0], n); arr[1] = std::max(arr[1], n); arr[2] += n; };

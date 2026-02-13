@@ -2,7 +2,6 @@
 #include <array>
 #include <vector>
 #include <cstring>
-#include <memory>
 #include <iostream>
 #include <cassert>
 #include <immintrin.h>
@@ -173,11 +172,6 @@ namespace tns
 
 				return return_cursor;
 			}
-			//void set_cursor_back(T* cursor)
-			//{
-			//	*cursor = -1;
-			//	this->chunks[this->current][1] = cursor;
-			//}
 			void clear()
 			{
 				this->chunks[0][1] = this->chunks[0][0];

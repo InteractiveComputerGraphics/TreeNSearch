@@ -1,10 +1,9 @@
 #pragma once
-#include <iostream>
 #include <array>
 #include <vector>
 #include <cstring>
-#include <algorithm>
 #include <limits>
+#include <cstdint>
 
 #include "vectors_internals.h"
 

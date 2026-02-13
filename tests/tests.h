@@ -3,8 +3,6 @@
 #include <array>
 #include <iostream>
 #include <algorithm>
-#include <string>
-#include <fstream>
 #include <omp.h>
 
 #include <TreeNSearch>

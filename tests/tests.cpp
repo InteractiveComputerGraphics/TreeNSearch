@@ -1,8 +1,9 @@
 #include "tests.h"
-#include <random>
-#include <iomanip>
-#include <sstream>
 #include <functional>
+#include <iomanip>
+#include <memory>
+#include <random>
+#include <sstream>
 
 struct Points
 {

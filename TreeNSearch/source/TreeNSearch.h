@@ -1,8 +1,6 @@
 #pragma once
 #include <vector>
 #include <array>
-#include <algorithm>
-#include <cassert>
 #include <omp.h>
 
 #include "internals/vectors_internals.h"

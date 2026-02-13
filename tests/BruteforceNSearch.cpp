@@ -161,7 +161,6 @@ bool BruteforceNSearch::compare(const int set_i, const int set_j, const tns::Tre
 			}
 		}
 	}
-	//std::cout << "Error: " << diff_count << " out of " << total_count << " neighbors are wrong (" << 100.0f * ((float)diff_count / (float)total_count) << "%)." << std::endl;
 	return diff_count == 0;
 }
 
