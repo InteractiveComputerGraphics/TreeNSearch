@@ -329,11 +329,11 @@ void tns::TreeNSearch::_set_up()
 
 	// Make SIMD look up tables aligned
 	if (this->shift_lut_32.size() == 0) {
-		this->shift_lut_32.resize(256);
+		this->shift_lut_32.resize(256, _mm256_setzero_si256());
 		for (int i = 0; i < 256; i++) {
 			this->shift_lut_32[i] = _mm256_loadu_si256((__m256i*) & tns::internals::shift_lut_32[i][0]);
 		}
-		this->shift_lut_8.resize(256);
+		this->shift_lut_8.resize(256, _mm_setzero_si128());
 		for (int i = 0; i < 256; i++) {
 			this->shift_lut_8[i] = _mm_loadu_si128((__m128i*) & tns::internals::shift_lut_8[i][0]);
 		}
