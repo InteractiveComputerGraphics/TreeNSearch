@@ -18,7 +18,7 @@ add_library(TreeNSearch ${INTERNAL_FILES} ${SOURCE_FILES} ${INCLUDE_FILES})
 target_include_directories(TreeNSearch PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 target_include_directories(TreeNSearch INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-install(FILES ${HEADER_FILES} DESTINATION include/)
+install(FILES ${INCLUDE_FILES} DESTINATION include/)
 install(FILES ${INTERNAL_FILES} DESTINATION include/internals)
 
 install(TARGETS TreeNSearch
