@@ -137,20 +137,15 @@ void tns::TreeNSearch::set_cell_size(const double cell_size)
 }
 void tns::TreeNSearch::run()
 {
-	if (this->get_total_n_points() < this->number_of_too_few_particles) {
-		this->run_scalar();
-	}
-	else {
-		// Run in SIMD mode
-		this->_set_up();
-		this->_check();
-		this->_clear_neighborlists();
-		this->_update_world_AABB_simd();
-		this->_points_to_cells_simd();
-		this->_build_octree_and_gather_leaves_simd();
-		this->_solve_leaves(/* use_simd = */ true);
-		this->are_cells_valid = true;
-	}
+	// Run in SIMD mode
+	this->_set_up();
+	this->_check();
+	this->_clear_neighborlists();
+	this->_update_world_AABB_simd();
+	this->_points_to_cells_simd();
+	this->_build_octree_and_gather_leaves_simd();
+	this->_solve_leaves(/* use_simd = */ true);
+	this->are_cells_valid = true;
 }
 void tns::TreeNSearch::run_scalar()
 {
@@ -431,24 +426,6 @@ void tns::TreeNSearch::_update_world_AABB()
 	constexpr float MINf = std::numeric_limits<float>::lowest();
 	std::array<float, 3> new_bottom = { MAXf, MAXf, MAXf };
 	std::array<float, 3> new_top = { MINf, MINf, MINf };
-
-	// Sequentual computation if points are too few
-	if (this->get_total_n_points() < this->number_of_too_few_particles) {
-		for (int set_i = 0; set_i < this->n_sets; set_i++) {
-			const float* points = this->set_points[set_i];
-			const int n_points = this->get_n_points_in_set(set_i);
-
-			for (int point_i = 0; point_i < n_points; point_i++) {
-				new_bottom[0] = std::min(new_bottom[0], points[3 * point_i]);
-				new_bottom[1] = std::min(new_bottom[1], points[3 * point_i + 1]);
-				new_bottom[2] = std::min(new_bottom[2], points[3 * point_i + 2]);
-
-				new_top[0] = std::max(new_top[0], points[3 * point_i]);
-				new_top[1] = std::max(new_top[1], points[3 * point_i + 1]);
-				new_top[2] = std::max(new_top[2], points[3 * point_i + 2]);
-			}
-		}
-	}
 
 	// Parallel version
 	// Note: Paralelized across points and sets
@@ -2602,11 +2579,6 @@ void tns::TreeNSearch::prepare_zsort()
 		If the octree exists, we can use merge sort on the cells (instead of on the points)
 		and then find the new point indices concatenating the cell's points in order.
 	*/
-
-	// Minimum number of points for zsort
-	if (this->get_total_n_points() < this->number_of_too_few_particles) {
-		this->are_cells_valid = false; // Ensures we do a global zsort
-	}
 
 	// Set up
 	this->_set_up();
